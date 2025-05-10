@@ -82,10 +82,7 @@ async function filterContent(content) {
   
   try {
     const payload = {
-      input: content,
-      settings: {
-        filterProfanity: true,  // Assuming Gemini API filters profanity if this is set
-      }
+      content: content,  // Assuming 'content' is the correct field
     };
 
     const response = await fetch(geminiApiUrl, {
@@ -103,7 +100,7 @@ async function filterContent(content) {
     }
 
     const data = await response.json();
-    return data.filtered || content;  // Return filtered content or fallback to original if no filter applied
+    return data.filteredContent || content;  // Return filtered content or fallback to original if no filter applied
   } catch (error) {
     console.error("Error while filtering content using Gemini:", error.message);
     throw error;
