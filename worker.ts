@@ -93,13 +93,16 @@ async function handleRequest(request) {
       return new Response(JSON.stringify({ message: "Title and Content are required." }), { status: 400 });
     }
 
-    let obfuscatedContent = content;
-    if (isRobloxScript(content)) {
+    // Call profanity filter API
+    const filteredContent = await filterContent(content);
+
+    let obfuscatedContent = filteredContent;
+    if (isRobloxScript(filteredContent)) {
       try {
         const response = await fetch("https://comfortable-starfish-46.deno.dev/obfuscate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ script: content }),
+          body: JSON.stringify({ script: filteredContent }),
         });
         if (response.ok) {
           const data = await response.json();
@@ -171,6 +174,23 @@ async function handleRequest(request) {
   }
 
   return new Response("Not Found", { status: 404 });
+}
+
+// Function to call the profanity filter API
+async function filterContent(content) {
+  const filterApiUrl = "https://super-feather-4931.hiplitehehe.workers.dev/filter";  // Replace with your filter URL
+  const response = await fetch(filterApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: content })
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to filter content.");
+  }
+
+  const data = await response.json();
+  return data.filtered;  // Returning the filtered content
 }
 
 function isRobloxScript(content) {
