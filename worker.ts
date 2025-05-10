@@ -1,4 +1,3 @@
-// GitHub settings (set GITHUB_TOKEN in Cloudflare environment variables)
 const GITHUB_TOKEN = ENV_GITHUB_TOKEN;
 const REPO_OWNER = "hiplitewhat";
 const REPO_NAME = "notes-app";
@@ -77,12 +76,14 @@ const HTML_PAGE = `
 `;
 
 // Function to call the Gemini API for content filtering
-async function filterContent(content) {
+async function filterContent(content: string): Promise<string> {
   const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   
   try {
     const payload = {
-      content: content,  // Assuming 'content' is the correct field
+      content: {
+        parts: [{ text: content }]
+      }
     };
 
     const response = await fetch(geminiApiUrl, {
@@ -108,7 +109,7 @@ async function filterContent(content) {
 }
 
 // Function to handle incoming requests
-async function handleRequest(request) {
+async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
   // Serve the main HTML page
@@ -192,12 +193,12 @@ async function handleRequest(request) {
 }
 
 // Function to generate a UUID
-function generateUUID() {
+function generateUUID(): string {
   return crypto.randomUUID();
 }
 
 // Function to store the note in GitHub
-async function storeNoteInGitHub(noteId, title, content) {
+async function storeNoteInGitHub(noteId: string, title: string, content: string): Promise<any> {
   if (!GITHUB_TOKEN) throw new Error("Missing GitHub token");
 
   const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/notes/${noteId}.json`;
@@ -230,7 +231,7 @@ async function storeNoteInGitHub(noteId, title, content) {
 }
 
 // Function to fetch all notes from GitHub
-async function fetchNotesFromGitHub() {
+async function fetchNotesFromGitHub(): Promise<any[]> {
   const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/notes`;
   const headers = {
     "Authorization": `token ${GITHUB_TOKEN}`,
@@ -244,7 +245,7 @@ async function fetchNotesFromGitHub() {
   }
 
   const files = await response.json();
-  const notes = [];
+  const notes: any[] = [];
 
   for (const file of files) {
     if (file.type === "file" && file.name.endsWith(".json")) {
@@ -257,7 +258,7 @@ async function fetchNotesFromGitHub() {
 }
 
 // Function to fetch a specific note from GitHub
-async function fetchNoteFromGitHub(noteId) {
+async function fetchNoteFromGitHub(noteId: string): Promise<any | null> {
   const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/notes/${noteId}.json`;
   const headers = {
     "Authorization": `token ${GITHUB_TOKEN}`,
