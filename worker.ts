@@ -1,4 +1,3 @@
-
 // GitHub settings (set GITHUB_TOKEN in Cloudflare environment variables)
 const GITHUB_TOKEN = ENV_GITHUB_TOKEN;
 const REPO_OWNER = "hiplitewhat";
@@ -77,21 +76,38 @@ const HTML_PAGE = `
 </html>
 `;
 
-// Function to call the profanity filter API
+// Function to call the Gemini API for content filtering
 async function filterContent(content) {
-  const filterApiUrl = "https://super-feather-4931.hiplitehehe.workers.dev/filter";  // Replace with your filter URL
-  const response = await fetch(filterApiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: content })
-  });
+  const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  
+  try {
+    const payload = {
+      input: content,
+      settings: {
+        filterProfanity: true,  // Assuming Gemini API filters profanity if this is set
+      }
+    };
 
-  if (!response.ok) {
-    throw new Error("Failed to filter content.");
+    const response = await fetch(geminiApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Failed to filter content using Gemini:", errorText);
+      throw new Error(`Failed to filter content using Gemini. Response: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.filtered || content;  // Return filtered content or fallback to original if no filter applied
+  } catch (error) {
+    console.error("Error while filtering content using Gemini:", error.message);
+    throw error;
   }
-
-  const data = await response.json();
-  return data.filtered;  // Returning the filtered content
 }
 
 // Function to handle incoming requests
@@ -120,7 +136,7 @@ async function handleRequest(request) {
       return new Response(JSON.stringify({ message: "Title and Content are required." }), { status: 400 });
     }
 
-    // Filter both title and content
+    // Filter both title and content using Gemini
     const filteredTitle = await filterContent(title);
     const filteredContent = await filterContent(content);
 
