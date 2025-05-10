@@ -1,8 +1,13 @@
+
 // GitHub settings (set GITHUB_TOKEN in Cloudflare environment variables)
 const GITHUB_TOKEN = ENV_GITHUB_TOKEN;
 const REPO_OWNER = "hiplitewhat";
 const REPO_NAME = "notes-app";
 const USER_AGENT = "notes-app-worker";
+
+// Gemini API settings
+const GEMINI_API_KEY = ENV_GEMINI_API_KEY;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // HTML content as a string (for the main page)
 const HTML_PAGE = `
@@ -72,13 +77,33 @@ const HTML_PAGE = `
 </html>
 `;
 
+// Function to call the profanity filter API
+async function filterContent(content) {
+  const filterApiUrl = "https://super-feather-4931.hiplitehehe.workers.dev/filter";  // Replace with your filter URL
+  const response = await fetch(filterApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: content })
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to filter content.");
+  }
+
+  const data = await response.json();
+  return data.filtered;  // Returning the filtered content
+}
+
+// Function to handle incoming requests
 async function handleRequest(request) {
   const url = new URL(request.url);
 
+  // Serve the main HTML page
   if (url.pathname === "/") {
     return new Response(HTML_PAGE, { headers: { "Content-Type": "text/html" } });
   }
 
+  // Handle GET request to fetch all notes
   if (url.pathname === "/notes" && request.method === "GET") {
     const notes = await fetchNotesFromGitHub();
     return new Response(JSON.stringify(notes), {
@@ -86,45 +111,30 @@ async function handleRequest(request) {
     });
   }
 
+  // Handle POST request to create a note
   if (url.pathname === "/notes" && request.method === "POST") {
     const requestBody = await request.json();
     const { title, content } = requestBody;
+
     if (!title || !content) {
       return new Response(JSON.stringify({ message: "Title and Content are required." }), { status: 400 });
     }
 
-    // Call profanity filter API
+    // Filter both title and content
+    const filteredTitle = await filterContent(title);
     const filteredContent = await filterContent(content);
-
-    let obfuscatedContent = filteredContent;
-    if (isRobloxScript(filteredContent)) {
-      try {
-        const response = await fetch("https://comfortable-starfish-46.deno.dev/obfuscate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ script: filteredContent }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (typeof data.obfuscated === "string" && data.obfuscated.trim() !== "") {
-            obfuscatedContent = data.obfuscated;
-          }
-        }
-      } catch (err) {
-        console.warn("Obfuscation API failed:", err.message);
-      }
-    }
 
     const noteId = generateUUID();
     console.log(`Storing note ID: ${noteId}`);
-    await storeNoteInGitHub(noteId, title, obfuscatedContent);
+    await storeNoteInGitHub(noteId, filteredTitle, filteredContent);
 
-    return new Response(JSON.stringify({ id: noteId, title, content: obfuscatedContent }), {
+    return new Response(JSON.stringify({ id: noteId, title: filteredTitle, content: filteredContent }), {
       status: 201,
       headers: { "Content-Type": "application/json" }
     });
   }
 
+  // Serve the specific note by ID (HTML view)
   if (url.pathname.startsWith("/notes/") && request.method === "GET" && !url.pathname.startsWith("/notes/raw/")) {
     const noteId = url.pathname.split("/")[2];
     const note = await fetchNoteFromGitHub(noteId);
@@ -147,22 +157,14 @@ async function handleRequest(request) {
     `, { headers: { "Content-Type": "text/html" } });
   }
 
+  // Serve the raw content of a note
   if (url.pathname.startsWith("/notes/raw/") && request.method === "GET") {
-    const userAgent = (request.headers.get("User-Agent") || "").toLowerCase();
-    if (!userAgent.startsWith("roblox")) {
-      return new Response("Access denied. hnotes.", {
-        status: 403,
-        headers: { "Content-Type": "text/plain" }
-      });
-    }
-
     const noteId = url.pathname.split("/")[3];
     console.log("Requested raw note ID:", noteId);
 
     const note = await fetchNoteFromGitHub(noteId);
     if (!note) {
-      console.warn(`Note with ID '${noteId}' not found in GitHub.`);
-      return new Response(`Raw note not found.\nMake sure the note ID is correct and the file exists in GitHub as notes/${noteId}.json.`, {
+      return new Response(`Raw note not found. Make sure the note ID is correct.`, {
         status: 404,
         headers: { "Content-Type": "text/plain" }
       });
@@ -176,31 +178,12 @@ async function handleRequest(request) {
   return new Response("Not Found", { status: 404 });
 }
 
-// Function to call the profanity filter API
-async function filterContent(content) {
-  const filterApiUrl = "https://super-feather-4931.hiplitehehe.workers.dev/filter";  // Replace with your filter URL
-  const response = await fetch(filterApiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: content })
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to filter content.");
-  }
-
-  const data = await response.json();
-  return data.filtered;  // Returning the filtered content
-}
-
-function isRobloxScript(content) {
-  return content.includes("game") || content.includes("script");
-}
-
+// Function to generate a UUID
 function generateUUID() {
   return crypto.randomUUID();
 }
 
+// Function to store the note in GitHub
 async function storeNoteInGitHub(noteId, title, content) {
   if (!GITHUB_TOKEN) throw new Error("Missing GitHub token");
 
@@ -233,6 +216,7 @@ async function storeNoteInGitHub(noteId, title, content) {
   return await response.json();
 }
 
+// Function to fetch all notes from GitHub
 async function fetchNotesFromGitHub() {
   const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/notes`;
   const headers = {
@@ -259,6 +243,7 @@ async function fetchNotesFromGitHub() {
   return notes;
 }
 
+// Function to fetch a specific note from GitHub
 async function fetchNoteFromGitHub(noteId) {
   const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/notes/${noteId}.json`;
   const headers = {
@@ -278,6 +263,7 @@ async function fetchNoteFromGitHub(noteId) {
   return { title: content.title, content: content.content };
 }
 
+// Cloudflare Worker event listener
 addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request));
 });
